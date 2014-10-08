@@ -12,9 +12,10 @@ Integrates Geeknote/Evernote into Vim.
 
 ![img](https://github.com/neilagabriel/vim-geeknote/blob/master/img/explorer.png)
 
-## Dependencies
+## Dependencies/Requirements
 
 - Vim 7.4.364 or newer (issues observed with earlier versions)
+- Linux (not tested on operating systems)
 
 ## Installation
 
@@ -32,24 +33,30 @@ Integrates Geeknote/Evernote into Vim.
 
 ## Optional Setup
 
-Quick toggle:
+### Quick toggle:
 
     noremap <F8> :Geeknote<cr>
 
-By default, regardless of whether you format your notes in plain-text or in
-markdown, the note content read back through Geeknote will not exactly match
-the content you specified. Often the differences are just in formatting but
-sometimes even the content itself may change. This is a result of the text
-conversion that Geeknote performs when reading/writing the note to the Evernote
-server. Unfortunately, Geeknote does not currently offer a way to work-around
-this issue which can be very annoying if you plan to create, edit, and view
-your notes in Vim. The following setting can be added to your .vimrc to work-
-around the issue from with this plugin itself. When set, the content of your
-notes will be saved exactly how it is specified when the note is saved. The
-only downside of this approach is your notes will be formatted in plain-text if
-you view from from Evernote.
+### Note format:
 
-    let g:GeeknoteFormat="pre"
+Use the option `g:GeeknoteFormat` to set the format mode used when saving notes
+to Geeknote. This is the equivalent of the `--format` options that Geeknote
+supports. E.g.:
+
+    let g:GeeknoteFormat="markdown"
+
+**Warning:** It is not advised that you use this option, use it at your own
+risk. The issue is that in the process of converting your notes from markdown
+to HTML and back, content is often reformatted. Worse is that if you edit and
+save a note that has been reformatted, there is even a large potential to lose
+content! This is a side-effect of the various tools/libs that Geeknote uses in
+performing the conversions. With the default settings, notes saved with
+vim-geeknote bypass these format conversions. This means that notes will be
+saved exactly as they appear within Vim. It also means that the notes will
+appear in plain-text when viewed outside of Vim in Evernote. If you plan on
+creating, editing, and viewing your notes in Vim, this trade-off is well worth
+it. And of course it does not mean that you cannot use the markdown format in
+your notes.
 
 ## Usage
 
@@ -75,9 +82,7 @@ Use `:GeeknoteCreateNote <name>` to create a new note. The note will be created
 in the notebook currently selected in the navigation window. If a notebook is
 not selected, the note will be created in the default notebook. A new buffer
 for the note will be displayed in the previous window if it is possible to do
-so or in a new vertical split. The note will not be created until the buffer is
-saved (e.g. `:w`). Once saved, the note will be created and the navigation
-window will update.
+so or in a new vertical split.
 
 Use `:GeeknoteSaveAsNote` to create a new note using the content of the current
 buffer. The first line in the buffer will be used as the note's title. The
