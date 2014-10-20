@@ -2,7 +2,7 @@
 
 [Geeknote](http://www.geeknote.me) Plugin for Vim. Under active development.
 
-## Supported Features
+## Intro 
 
 Integrates Geeknote/Evernote into Vim.
 - Notebook navigation, creation, and renaming
@@ -25,19 +25,19 @@ Integrates Geeknote/Evernote into Vim.
 
 2. Use your plugin manager of choice to install plugin.
 
-- [Vundle](https://github.com/gmarik/vundle)
-   - Add `Bundle 'https://github.com/neilagabriel/vim-geeknote'` to .vimrc
-   - Run `:BundeInstall`
-- [Pathogen](https://github.com/tpope/vim-pathogen)
-   - `git clone https://github.com/neilagabriel/vim-geeknote ~/.vim/bundle/vim-geeknote`
+* [Vundle](https://github.com/gmarik/vundle)
+   * Add `Bundle 'https://github.com/neilagabriel/vim-geeknote'` to .vimrc
+   * Run `:BundeInstall`
+* [Pathogen](https://github.com/tpope/vim-pathogen)
+   * `git clone https://github.com/neilagabriel/vim-geeknote ~/.vim/bundle/vim-geeknote`
 
-## Optional Setup
+## Optional Setup and Configuration
 
-### Quick toggle:
+### Quick toggle
 
     noremap <F8> :Geeknote<cr>
 
-### Note format:
+### Note format
 
 Use the option `g:GeeknoteFormat` to set the format mode used when saving notes
 to Geeknote. This is the equivalent of the `--format` options that Geeknote
@@ -58,7 +58,59 @@ creating, editing, and viewing your notes in Vim, this trade-off is well worth
 it. And of course it does not mean that you cannot use the markdown format in
 your notes.
 
+### Navigation Window Behavior
+
+#### Limit Width
+
+By default, vim-geeknote will attempt to resize the navigation window based on
+its current content. If you have notebooks or notes with very long names you
+may want to use the following option to cap the size of the window:
+
+    let g:GeeknoteMaxExplorerWidth=<value>
+
+Where `<value>` is replaced with the max width of the window.
+
+#### Fix Width
+
+Use the following option to fix the width of the window to a specific value:
+
+    let g:GeeknoteExplorerWidth=<value>
+
+Where `<value>` is replaced with the desired width of the window. This option
+overrides all other width-related options.
+
+#### Limit View to Specific Notebooks
+
+By default, all notebooks will be shown in the navigation window. Depending on
+the number notebooks you have, this can add a non-trivial amount of time to the
+load time of the plugin. You may also simply not want to see your full set of
+notebooks when working in Vim. Use the following option to limit the display to
+a specific notebook or set of notebooks:
+
+    let g:GeeknoteNotebooks=
+    \    [
+    \        'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee', 
+    \        'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee', 
+    \    ]
+
+### Launching
+
+It may sometimes be convenient to launch geeknote in a new instance of Vim. An
+alias can be helpful for this. Here an example for `bash`:
+
+    alias vim-geeknote='vi -c Geeknote'
+
+### Geeknote Autocommands
+
+vim-geeknote uses FileType `geeknote` for the navigation window. This can be to
+set your own custom behavior. For example, the following code may be used to
+disable line numbers in the navigation window:
+
+    autocmd FileType geeknote setlocal nonumber
+
 ## Usage
+
+### Toggle Geeknote Navigation Window
 
 Use `:Geeknote` to open/toggle the geeknote navigation window. If the
 navigation window is not visible, this command will split the current window
@@ -72,11 +124,11 @@ vertical split. To save changes to the note, simply save the buffer (e.g.
 `:w`). The title of the note will be shown on the first line. The title line
 should not be deleted from the buffer but *may* be modified to rename the note.
 
+### Creating Notebooks
+
 Use `:GeeknoteCreateNotebook <name>` to create a new notebook.
 
-To rename notebooks or notes, simply modify the the name of the notebook/note
-in the navigation window and save the bugger (e.g. `:w`). Any number of changes
-can be made before saving, but be sure not to modify an item's GUID.
+### Creating Notes
 
 Use `:GeeknoteCreateNote <name>` to create a new note. The note will be created
 in the notebook currently selected in the navigation window. If a notebook is
@@ -89,10 +141,20 @@ buffer. The first line in the buffer will be used as the note's title. The
 remainder of the buffer will be saved as note content. Note this this command
 will create and switch to a new buffer.
 
+### Renaming Notebooks and Notes
+
+To rename notebooks or notes, simply modify the name of the notebook/note in
+the navigation window and save the bugger (e.g. `:w`). Any number of changes
+can be made before saving, but be sure not to modify an item's GUID.
+
+### Moving Notes
+
 To move a note into a different notebook, simply move the note's text (includes
 title and GUID) under the desired notebook in the navigation window and save
 the buffer. Similar to renaming, any number notes can be moved before saving
 the buffer.
+
+### Synchronization 
 
 Use `:GeeknoteSync` to update the navigation with the latest data on the
 Evernote server. Warning, any notes that are opened when this command is issued
