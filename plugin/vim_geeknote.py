@@ -54,14 +54,6 @@ def GeeknoteCreateNote(title):
     # Cleanup the title of the note.
     title = title.strip('"\'')
 
-    # Find a good place to open a new window for the note content.
-    origWin = getActiveWindow()
-    if isWindowUsable(origWin) is False:
-        prevWin = getPreviousWindow()
-        setActiveWindow(prevWin)
-        if isWindowUsable(prevWin) is False:
-            vim.command('botright vertical new')
-
     # Finally, create and open a blank note.
     note              = Types.Note()
     note.title        = title
@@ -74,7 +66,6 @@ def GeeknoteCreateNote(title):
 
     # Add the note to the navigation window.
     explorer.addNote(note)
-    explorer.selectNote(note)
     explorer.render()
 
 def GeeknoteCreateNotebook(name):
@@ -86,7 +77,6 @@ def GeeknoteCreateNotebook(name):
         vim.command('echoerr "Failed to create notebook."')
 
     explorer.addNotebook(notebook)
-    explorer.selectNotebook(notebook)
     explorer.render()
 
 def GeeknoteSaveAsNote():
@@ -140,10 +130,16 @@ def GeeknoteSaveAsNote():
         return
 
     explorer.addNote(note)
-    explorer.selectNote(note)
     explorer.render()
 
     GeeknoteOpenNote(note)
+
+def GeeknoteSearch(args):
+    notes = GeeknoteGetNotes(args)
+
+    explorer.clearSearchResults()
+    explorer.addSearchResults(notes)
+    explorer.render()
 
 def GeeknoteSaveNote(filename):
     note    = GeeknoteGetOpenNote(filename)

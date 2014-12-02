@@ -81,6 +81,8 @@ overrides all other width-related options.
 
 #### Limit View to Specific Notebooks
 
+##### By GUID
+
 By default, all notebooks will be shown in the navigation window. Depending on
 the number notebooks you have, this can add a non-trivial amount of time to the
 load time of the plugin. You may also simply not want to see your full set of
@@ -93,6 +95,30 @@ a specific notebook or set of notebooks:
     \        'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee', 
     \    ]
 
+##### By Expression
+
+Notebooks can also be filtered by expressions. Use the following option to
+specify a list of regular expressions to apply to each notebook to decide if it
+should be included in the navigation window. Unlike filtering by GUID, this
+option does *not* yield a performance improvement. In fact, it may slightly
+degrade it depending on the number of expressions you specify.
+
+    let g:GeeknoteNotebookFilters=
+    \    [
+    \        'Unsorted'          ,
+    \        '^Status - WW(\d+)$',
+    \    ]
+
+#### Explorer Special Characters
+
+The following options may be used to customize the characters used to denote
+opened/closed notebooks and tags:
+
+    let g:GeeknoteExplorerNodeClosed = '+'
+    let g:GeeknoteExplorerNodeOpened = '-'
+
+Both unicode and ascii characters are supported.
+
 ### Launching
 
 It may sometimes be convenient to launch geeknote in a new instance of Vim. An
@@ -102,9 +128,9 @@ alias can be helpful for this. Here an example for `bash`:
 
 ### Geeknote Autocommands
 
-vim-geeknote uses FileType `geeknote` for the navigation window. This can be to
-set your own custom behavior. For example, the following code may be used to
-disable line numbers in the navigation window:
+vim-geeknote uses FileType `geeknote` for the navigation window. This may be
+used to set your own custom behavior. For example, the following disables line
+numbers in the navigation window:
 
     autocmd FileType geeknote setlocal nonumber
 
@@ -160,6 +186,11 @@ Use `:GeeknoteSync` to update the navigation with the latest data on the
 Evernote server. Warning, any notes that are opened when this command is issued
 will not be updated. Support for this will be added in future releases.
 
+### Searching
+
+Use `:GeeknoteSearch <text>` to search for notes with specific `text` in their
+titles' and/or content. All results will be added to the nagivation window.
+
 ## Acknowledgments
 
 - [Geeknote](http://www.geeknote.me)
@@ -169,8 +200,8 @@ will not be updated. Support for this will be added in future releases.
 ## Todo
 
 - Refresh open notes upon `:GeeknoteSync`
-- Tag support
-- Prettier navigation window
+- Complete tag support (adding tags, applying/removing to/from notes)
+- Customizable note display
 - Improved notebook creation process
 
 ## License

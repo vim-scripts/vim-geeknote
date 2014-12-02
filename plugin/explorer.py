@@ -6,6 +6,19 @@ from view  import *
 from utils import *
 from conn  import *
 
+#======================== Global Setup/Config ================================#
+
+ExplorerCharOpened = u'\u25bd'
+ExplorerCharClosed = u'\u25b6'
+
+if int(vim.eval('exists("g:GeeknoteExplorerNodeOpened")')):
+    ExplorerCharOpened = vim.eval(
+        'g:GeeknoteExplorerNodeOpened').decode('utf8')
+
+if int(vim.eval('exists("g:GeeknoteExplorerNodeClosed")')):
+    ExplorerCharClosed = vim.eval(
+        'g:GeeknoteExplorerNodeClosed').decode('utf8')
+
 #======================== Registry ===========================================#
 
 #
@@ -14,16 +27,39 @@ from conn  import *
 #
 registry = {}
 
-def addNode(guid, node):
-    registry[guid] = node
+#
+# Maps GUIDs to instance numbers. Each node represents an object. Objects are
+# unique but nodes are not. There can be any number nodes instanciated for an
+# object.  An instance number is used to distinguish nodes for the same object.
+# This container maps an object's GUID to the maximum instance number of any
+# node representing the object (i.e. object node count minus one).
+#
+instanceMap = {}
+
+def registerNode(node):
+    guid = node.getGuid()
+    if guid not in instanceMap:
+        instance = 0
+    else:
+        instance = instanceMap[guid] + 1
+
+    instanceMap[guid] = instance
+
+    key = guid + "(" + str(instance) + ")"
+    node.setKey(key)
+    registry[key] = node
 
 def deleteNodes():
     registry.clear()
 
-def getNode(guid):
-    if guid in registry:
-        return registry[guid]
+def getNode(key):
+    if key in registry:
+        return registry[key]
     return None 
+
+def getNodeByInstance(guid, instance):
+    key = guid + "(" + str(instance) + ")"
+    return getNode(key)
 
 #======================== Node ===============================================#
 
@@ -34,10 +70,14 @@ class Node(object):
         self.row       = -1
         self.indent    = indent
         self.prefWidth = 0
+        self.key       = ""
         self.close()
 
     def activate(self):
         self.toggle()
+
+    def adapt(self, line):
+        return False
 
     def addChild(self, node):
         node.parent = self
@@ -52,6 +92,12 @@ class Node(object):
     def expand(self):
         self.expanded = True
 
+    def getGuid(self):
+        return "None"
+
+    def getKey(self):
+        return self.key
+
     def getPreferredWidth(self):
         if self.parent is None or self.parent.isExpanded():
             return self.prefWidth
@@ -59,6 +105,12 @@ class Node(object):
 
     def isExpanded(self):
         return self.expanded is True
+
+    def refresh(self):
+        pass
+
+    def setKey(self, key):
+        self.key = key
 
     def removeChild(self, node):
         if node in self.children:
@@ -83,16 +135,43 @@ class NotebookNode(Node):
         self.loaded   = False
         self.setName(notebook.name)
 
+    def adapt(self, line):
+        if len(self.children) > 0:
+            r = re.compile("^\S+"     # match leading non-whitespace characters 
+                           "(?:\s+)?" # optional whitespace
+                           "(.*)"     # notebook name
+                           "\(\d+\)"  # note count
+                           "(?:\s+)?" # optional whitespace
+                           "N\[.*\]"  # key
+                           ".*$")     # everything else till end of line
+        else:
+            r = re.compile("^\S+"     # match leading non-whitespace characters
+                           "(?:\s+)?" # optional whitespace
+                           "(.*)"     # notebook name
+                           "N\[.*\]"  # key
+                           ".*$")     # everything else till end of line
+
+        m = r.match(line)
+        if m:
+            name = m.group(1).strip()
+            if self.name != name:
+                self.setName(name)
+                return True
+        else:
+            print line
+
+        return False
+
     def addNote(self, note):
         node = NoteNode(note, self.indent + 1)
-        addNode(note.guid, node)
+        registerNode(node)
 
         self.addChild(node)
+        return node
 
     def commitChanges(self):
-        if self.notebook.name != self.name:
-            self.notebook.name = self.name
-            GeeknoteUpdateNotebook(self.notebook)
+        self.notebook.name = self.name
+        GeeknoteUpdateNotebook(self.notebook)
 
     def expand(self):
         if self.loaded is False:
@@ -106,6 +185,9 @@ class NotebookNode(Node):
 
         super(NotebookNode, self).expand()
 
+    def getGuid(self):
+        return self.notebook.guid
+
     def getNotes(self):
         searchWords = 'notebook:"%s"' % self.notebook.name
         return GeeknoteGetNotes(searchWords)
@@ -113,18 +195,22 @@ class NotebookNode(Node):
     def render(self, buffer):
         numNotes = len(self.children)
 
-        if self.expanded is False:
-            if self.loaded and numNotes == 0:
-                line = '-'
-            else:
-                line = '+'
+        if self.expanded:
+            line = ExplorerCharOpened
         else:
-            line = '-'
+            if self.loaded and numNotes == 0:
+                line = ExplorerCharOpened
+            else:
+                line = ExplorerCharClosed
 
-        line += ' ' + self.name
+        line += ' ' + self.name.decode('utf8')
+        if numNotes != 0:
+            line += ' (%d)' % numNotes
+
+        line = line.encode('utf8')
         self.prefWidth = len(line)
 
-        buffer.append('{:<50} [{}]'.format(line, self.notebook.guid))
+        buffer.append('{:<50} N[{}]'.format(line, self.getKey()))
         self.row = len(buffer)
 
         if self.expanded:
@@ -140,28 +226,28 @@ class NoteNode(Node):
     def __init__(self, note, indent=1):
         super(NoteNode, self).__init__(indent)
 
-        self.note = note
-        self.notebookGuid = note.notebookGuid
-        self.setTitle(note.title)
+        self.note  = note
+        self.title = None
+        self.refresh()
+
+    def adapt(self, line):
+        # Was the note renamed?
+        r = re.compile("^\s+"    # leading whitespace
+                       "(.*)"    # note title
+                       "n\[.*\]" # key
+                       ".*$")    # everything else till end of line
+        m = r.match(line)
+        if m:
+            title = m.group(1).strip()
+            if self.title != title:
+                self.setTitle(title)
+                return True
+        return False
 
     def activate(self):
         super(NoteNode, self).activate()
 
-        # TODO: move all of this into view.py
-        origWin        = getActiveWindow()
-        prevWin        = getPreviousWindow()
-        firstUsableWin = getFirstUsableWindow()
-        isPrevUsable   = isWindowUsable(prevWin)
-        
-        setActiveWindow(prevWin)
-        if (isPrevUsable is False) and (firstUsableWin == -1):
-            vim.command('botright vertical new')
-        elif isPrevUsable is False:
-            setActiveWindow(firstUsableWin)
-
         GeeknoteOpenNote(self.note)
-        setActiveWindow(origWin)
-        return
 
     def commitChanges(self):
         if self.note.title != self.title:
@@ -172,13 +258,26 @@ class NoteNode(Node):
             self.note.notebookGuid = self.notebookGuid
             GeeknoteUpdateNote(self.note)
 
+    def getGuid(self):
+        return self.note.guid
+
+    def refresh(self):
+        if self.title is not None:
+            self.note = GeeknoteRefreshNoteMeta(self.note)
+
+        self.notebookGuid = self.note.notebookGuid
+        self.setTitle(self.note.title)
+
+    def getGuid(self):
+        return self.note.guid
+
     def render(self, buffer):
         line  = ' ' * (self.indent * 4)
-        line += self.title
+        line += self.title.decode('utf8')
 
         self.prefWidth = len(line)
 
-        line = '{:<50} [{}]'.format(line, self.note.guid)
+        line = '{:<48} n[{}]'.format(line, self.getKey())
         buffer.append(line)
         self.row = len(buffer)
 
@@ -197,12 +296,10 @@ class TagNode(Node):
 
     def addNote(self, note):
         node = NoteNode(note, self.indent + 1)
-
-        # FIXME
-        if note.guid not in registry:
-            addNode(note.guid, node)
+        registerNode(node)
 
         self.addChild(node)
+        return node
 
     def expand(self):
         if self.loaded is False:
@@ -214,6 +311,9 @@ class TagNode(Node):
 
         super(TagNode, self).expand()
 
+    def getGuid(self):
+        return self.tag.guid
+
     def getNotes(self):
         searchWords = 'tag:"%s"' % self.tag.name
         return GeeknoteGetNotes(searchWords)
@@ -221,21 +321,23 @@ class TagNode(Node):
     def render(self, buffer):
         numNotes = len(self.children)
 
-        if self.expanded is False:
-            if self.loaded and numNotes == 0:
-                line = '-'
-            else:
-                line = '+'
+        if self.expanded:
+            line = ExplorerCharOpened
         else:
-            line = '-'
+            if self.loaded and numNotes == 0:
+                line = ExplorerCharOpened
+            else:
+                line = ExplorerCharClosed
 
-        line += ' ' + self.name
-        self.prefWidth = len(line)
-
+        line += ' ' + self.name.decode('utf8')
         if numNotes != 0:
             line += ' (%d)' % numNotes
 
-        buffer.append('{:<50} [{}]'.format(line, self.tag.guid))
+        line = line.encode('utf8')
+        self.prefWidth = len(line)
+
+        buffer.append('{:<50} T[{}]'.format(line, self.getKey()))
+
         self.row = len(buffer)
 
         if self.expanded:
@@ -254,6 +356,7 @@ class Explorer(object):
         self.dataFile      = None
         self.buffer        = None
         self.expandState   = {}
+        self.searchResults = []
 
         self.refresh()
 
@@ -263,7 +366,7 @@ class Explorer(object):
                 self.dataFile.name, 
                 ':call Vim_GeeknoteCommitStart()')
 
-        autocmd('BufWritePre' , 
+        autocmd('BufWritePost', 
                 self.dataFile.name, 
                 ':call Vim_GeeknoteCommitComplete()')
 
@@ -276,9 +379,9 @@ class Explorer(object):
             pass
 
     def activateNode(self, line):
-        guid = self.getNodeGuid(line)
-        if guid is not None:
-            node = getNode(guid)
+        key = self.getNodeKey(line)
+        if key is not None:
+            node = getNode(key)
             node.activate()
 
             # Rerender the navigation window. Keep the current cursor postion.
@@ -287,92 +390,96 @@ class Explorer(object):
             vim.current.window.cursor = (row, col)
 
     def addNote(self, note):
-        notebook = getNode(note.notebookGuid)
-        notebook.addNote(note) 
+        notebook = getNodeByInstance(note.notebookGuid, 0)
+        notebook.expand()
+
+        node = notebook.addNote(note) 
+        self.selectNode(node)
 
     def addNotebook(self, notebook):
         node = NotebookNode(notebook)
         self.notebooks.append(node)
         self.notebooks.sort(key=lambda n: n.notebook.name.lower())
 
-        addNode(notebook.guid, node)
+        registerNode(node)
+
+        self.selectNode(node)
+
+    def addSearchResults(self, results):
+        for note in results:
+            node = NoteNode(note, 0)
+            registerNode(node)
+            self.searchResults.append(node)
 
     def addTag(self, tag):
         tagNode = TagNode(tag)
         self.tags.append(tagNode)
         self.tags.sort(key=lambda t: t.tag.name.lower())
 
-        addNode(tag.guid, tagNode)
+        registerNode(tagNode)
 
     def applyChanges(self):
-        if isBufferModified(self.buffer.number) is False:
-            return
-
         for row in xrange(len(self.buffer)):
             line = self.buffer[row]
+            key  = self.getNodeKey(line)
+            if key is not None:
+                node = getNode(key)
 
-            # Look for changes to notes.
-            r = re.compile('^\s+(.+)\[(.+)\]$')
-            m = r.match(line)
-            if m: 
-                title = m.group(1).strip()
-                guid  = m.group(2)
-                node  = getNode(guid)
+                # Adapt the node based on it's current text.
+                modified = node.adapt(line)
+
+                # If the node represents a note, check to see if it was moved.
                 if isinstance(node       , NoteNode) and \
                    isinstance(node.parent, NotebookNode):
+                    parent = self.getNodeParent(row)
+                    if (node.parent != parent):
+                        node.notebookGuid = parent.notebook.guid
+                        parent.expand()
 
-                    # Did the user change the note's title?
-                    if title != node.title:
-                        node.setTitle(title)
-                        if node not in self.modifiedNodes:
-                            self.modifiedNodes.append(node)
+                        node.parent.removeChild(node)
+                        parent.addChild(node)
 
-                    # Did the user move the note into a different notebook?
-                    newParent = self.findNotebookForNode(row)
-                    if newParent is not None:
-                        if newParent.notebook.guid != node.notebookGuid:
-                            oldParent = getNode(node.notebookGuid)
-                            node.notebookGuid = newParent.notebook.guid
+                        modified = True
 
-                            newParent.expand()
-                            newParent.addChild(node)
-                            oldParent.removeChild(node)
-
-                            if node not in self.modifiedNodes:
-                                self.modifiedNodes.append(node)
-                continue
-
-            # Look for changes to notebooks.
-            r = re.compile('^[\+-](.+)\[(.+)\]$')
-            m = r.match(line)
-            if m:
-                name = m.group(1).strip()
-                guid = m.group(2)
-                node = getNode(guid)
-                if isinstance(node, NotebookNode):
-                    if name != node.name:
-                        node.setName(name)
+                if modified:
+                    if node not in self.modifiedNodes:
                         self.modifiedNodes.append(node)
-                continue
+
+    def clearSearchResults(self):
+        del self.searchResults[:]
 
     def commitChanges(self):
-        self.applyChanges()
+        if isBufferModified(self.buffer.number):
+            self.applyChanges()
+
         for node in self.modifiedNodes:
             node.commitChanges()
+
+        for node in self.modifiedNodes:
+            for key in registry:
+                tempNode = getNode(key)
+                if tempNode.getGuid() == node.getGuid():
+                    if tempNode.getKey() != node.getKey():
+                        tempNode.refresh()
+
         del self.modifiedNodes[:]
 
-    #
-    # Search upwards, starting at the given row number and return the first
-    # note nodebook found. 
-    #
-    def findNotebookForNode(self, nodeRow):
-        while nodeRow > 0:
-            guid = self.getNodeGuid(self.buffer[nodeRow])
-            if guid is not None: 
-                node = getNode(guid)
-                if isinstance(node, NotebookNode):
+    def getNodeParent(self, row):
+        key  = self.getNodeKey(self.buffer[row])
+        node = getNode(key)
+
+        # Only notes have parents
+        if not isinstance(node, NoteNode):
+            return None
+
+        while row > 0:
+            key = self.getNodeKey(self.buffer[row])
+            if key is not None: 
+                node = getNode(key)
+                if not isinstance(node, NoteNode):
                     return node
-            nodeRow -= 1
+            row -= 1
+
         return None
 
     def getSelectedNotebook(self):
@@ -384,16 +491,18 @@ class Explorer(object):
         text = vim.current.line
         setActiveWindow(prevWin)
 
-        guid = self.getNodeGuid(text)
-        if guid is not None:
-            node = getNode(guid)
+        key = self.getNodeKey(text)
+        if key is not None:
+            node = getNode(key)
             if isinstance(node, NotebookNode):
                 return node.notebook
-            if isinstance(node, NoteNode):
-                return getNode(node.notebookGuid)
+            if isinstance(node, NoteNode): 
+                if isinstance(node.parent, NotebookNode):
+                    node = getNode(node.parent.getKey())
+                    return node.notebook
         return None
 
-    def getNodeGuid(self, nodeText):
+    def getNodeKey(self, nodeText):
         r = re.compile('^.+\[(.+)\]$')
         m = r.match(nodeText)
         if m: 
@@ -419,7 +528,6 @@ class Explorer(object):
         setWindowVariable(wnum, 'wrap'       , False)
         setWindowVariable(wnum, 'cursorline' , True)
         setBufferVariable(bnum, 'swapfile'   , False)
-        setBufferVariable(bnum, 'buftype'    , 'quickfix')
         setBufferVariable(bnum, 'bufhidden'  , 'hide')
 
         vim.command('setfiletype geeknote')
@@ -452,16 +560,41 @@ class Explorer(object):
             self.selectNotebook(notebook)
 
     def refreshNotebooks(self):
+        #
+        # If the user already specified which notebooks to load, load just
+        # those notebooks.
+        #
         if int(vim.eval('exists("g:GeeknoteNotebooks")')):
             guids = vim.eval('g:GeeknoteNotebooks')
             for guid in guids:
                 notebook = GeeknoteGetNotebook(guid)
                 if notebook is not None:
                     self.addNotebook(notebook)
-        else:
-            notebooks = GeeknoteGetNotebooks()
+            return
+
+        #
+        # Otherwise, load all notebooks and apply any filters that the user
+        # specified (if any).
+        #
+        notebooks = GeeknoteGetNotebooks()
+        if not int(vim.eval('exists("g:GeeknoteNotebookFilters")')):
             for notebook in notebooks:
                 self.addNotebook(notebook)
+        else:
+            regex = []
+            filters = vim.eval('g:GeeknoteNotebookFilters')
+            for filter in filters:
+                try:
+                    r = re.compile(filter)
+                    regex.append(r)
+                except:
+                    pass
+
+            for notebook in notebooks:
+                for r in regex:
+                    if r.search(notebook.name):
+                        self.addNotebook(notebook)
+                        break
 
     # Render the navigation buffer in the navigation window..
     def render(self):
@@ -476,7 +609,8 @@ class Explorer(object):
         # by the user. Do not synchronize them yet with the server, just make
         # sure they are not lost.
         #
-        self.applyChanges()
+        if isBufferModified(self.buffer.number):
+            self.applyChanges()
 
         # Clear the navigation buffer to get rid of old content (if any).
         del self.buffer[:]
@@ -484,18 +618,27 @@ class Explorer(object):
         # Prepare the new content and append it to the navigation buffer.
         content = []
         content.append('Notebooks:')
-        content.append('{:=^90}'.format('='))
+        content.append('{:=^92}'.format('='))
 
-        # Render notebooks, notes, and tags
+        # Render notebooks, notes, tags, and search results
         for node in self.notebooks:
             node.render(content)
 
-        content.append('')
-        content.append('Tags:')
-        content.append('{:=^90}'.format('='))
+        if len(self.tags) > 0:
+            content.append('')
+            content.append('Tags:')
+            content.append('{:=^92}'.format('='))
 
-        for node in self.tags:
-            node.render(content)
+            for node in self.tags:
+                node.render(content)
+
+        if len(self.searchResults) > 0:
+             content.append('')
+             content.append('Search Results:')
+             content.append('{:=^92}'.format('='))
+
+             for node in self.searchResults:
+                 node.render(content)
 
         # Write the content list to the buffer starting at row zero.
         self.buffer.append(content, 0)
@@ -544,20 +687,20 @@ class Explorer(object):
         vim.command("vertical resize %d" % maxWidth)
 
     def restoreExpandState(self):
-        for guid in self.expandState:
-            node = getNode(guid)
+        for key in self.expandState:
+            node = getNode(key)
             if node is not None:
-                if self.expandState[guid]:
+                if self.expandState[key]:
                     node.expand()
                 else:
                     node.close()
 
     def saveExpandState(self):
         for node in self.notebooks:
-            self.expandState[node.notebook.guid] = node.expanded
+            self.expandState[node.getKey()] = node.expanded
 
         for node in self.tags:
-            self.expandState[node.tag.guid] = node.expanded
+            self.expandState[node.getKey()] = node.expanded
 
     def selectNode(self, node):
         self.selectedNode = node
@@ -569,17 +712,12 @@ class Explorer(object):
             vim.current.window.cursor = (node.row, 0)
             setActiveWindow(origWin)
 
-    def selectNote(self, note):
-        node = getNode(note.notebookGuid)
-        if node is not None:
-            node = getNode(note.notebookGuid)
-            node.expand()
-
-        node = getNode(note.guid)
-        self.selectNode(node)
-
     def selectNotebook(self, notebook):
-        node = getNode(notebook.guid)
+        #
+        # Notebooks never have more than one assoicated node, therefore, use
+        # zero for the instance number.
+        #
+        node = getNodeByInstance(notebook.guid, 0)
         if node is not None:
             self.selectNode(node)
 
