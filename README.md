@@ -65,12 +65,14 @@ your notes.
 #### Limit Width
 
 By default, vim-geeknote will attempt to resize the navigation window based on
-its current content. If you have notebooks or notes with very long names you
-may want to use the following option to cap the size of the window:
+its current content, up to 40 columns. If you have notebooks or notes with very
+long names you may want to use the following option:
 
     let g:GeeknoteMaxExplorerWidth=<value>
 
-Where `<value>` is replaced with the max width of the window.
+Where `<value>` is replaced with the max width of the window. Depending on the
+value you specify, this could be used to increase the cap in order to view
+longer names or decrease it to keep the navigation window even smaller.
 
 #### Fix Width
 
@@ -145,6 +147,21 @@ used to set your own custom behavior. For example, the following disables line
 numbers in the navigation window:
 
     autocmd FileType geeknote setlocal nonumber
+
+### Filesystem
+
+vim-geeknote uses temporary files to display the navigation window and for any
+notes that are opened. By default, files are created in the system temp
+directory (ie. `TMPDIR`, `TEMP`, or `TMP`). The following option allows the
+user to specify where all temp (or scratch) files should be maintained. Note
+that vim-geeknote will attempt to cleanup after itself when it is proper to do
+so.
+
+    let g:GeeknoteScratchDirectory=<path>
+
+Where `<path>` is replaced with the desired filesystem location for any and all
+temp files created by vim-geeknote. *Note that the path must exist.* The plugin
+will not attempt to create it.
 
 ## Usage
 
